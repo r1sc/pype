@@ -1,0 +1,19 @@
+{
+  "name": "sdf",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node dev.mjs",
+    "test": "tsc -p ./tests/tsconfig.json && node test_out/tests/tests.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "esbuild": "^0.19",
+    "esbuild-svelte": "^0.8",
+    "svelte": "^4.2",
+    "svelte-preprocess": "^5.1",
+    "typescript": "^5.3"
+  }
+}
