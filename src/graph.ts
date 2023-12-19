@@ -21,38 +21,41 @@ export class Graph {
         this.root = new Scope();
         add_intrinsics(this.root);
     }
-    
-    compile_and_run_node(node: CodeNode) {
+
+    compile_and_run_parent(node: CodeNode) {
         node.scope.constants.clear();
-        const edges_to = this.edges.filter(edge => edge.to === node);
-        for (let i = 0; i < edges_to.length; i++) {
-            const varname = String.fromCharCode(97 + i);
-            const edge = edges_to[i];
+        const edges_from = this.edges.filter(x => x.to === node);
+        for (let i = 0; i < edges_from.length; i++) {
+            const edge = edges_from[i];
             if (edge.from.output === undefined) {
-                edge.from.compile_and_run();
+                this.compile_and_run_parent(edge.from);
             }
             if (edge.from.output === undefined) {
-                throw new Error("What");
+                throw new Error("This should never happen");
             }
             if (edge.from.output?.kind === "err") {
-                node.output = { kind: "err", message: `Ancestor node failed` };
+                node.output = { kind: "err", message: "Error in input node" };
                 return;
             }
-            node.scope.constants.set(varname, edge.from.output.data);
+            const varname = 97 + i;
+            node.scope.constants.set(String.fromCharCode(varname), edge.from.output?.data);
         }
-
         node.compile_and_run();
-        
-        const edges_from = this.edges.filter(edge => edge.from === node);
-        for (const edge of edges_from) {
+    }
+
+    compile_and_run_node(node: CodeNode) {
+        this.compile_and_run_parent(node);
+
+        const edges_to = this.edges.filter(x => x.from === node);
+        for(const edge of edges_to) {
             this.compile_and_run_node(edge.to);
         }
     }
 
     delete_node(node: CodeNode) {
-        for(let i = 0; i < this.edges.length; i++) {
+        for (let i = 0; i < this.edges.length; i++) {
             const edge = this.edges[i];
-            if(edge.from === node || edge.to === node) {
+            if (edge.from === node || edge.to === node) {
                 this.edges.splice(i, 1);
                 i--;
             }
@@ -61,7 +64,7 @@ export class Graph {
         const idx = this.nodes.indexOf(node);
         this.nodes.splice(idx, 1);
     }
-    
+
     save_to_localstorage() {
         const edges: SerializationObject["edges"] = [];
         for (const edge of this.edges) {
@@ -84,7 +87,7 @@ export class Graph {
         const data = JSON.stringify(to_be_serialized);
         localStorage.setItem("data", data);
     }
-    
+
     load_from_localstorage(): boolean {
         const data_str = localStorage.getItem("data");
         if (data_str === null) return false;
@@ -95,7 +98,7 @@ export class Graph {
 
         for (const node of data.node_data) {
             const codenode = new CodeNode(node.src, node.x, node.y, this.root, node.title);
-            
+
             codenode.width = node.w;
             codenode.height = node.h;
             this.nodes.push(codenode);
@@ -117,7 +120,7 @@ export class CodeNode {
     compiled_expr?: Expr;
     output?: EvalResult;
 
-    public constructor(public src: string, public x: number, public y: number, parent_scope: Scope, public title?: string) { 
+    public constructor(public src: string, public x: number, public y: number, parent_scope: Scope, public title?: string) {
         this.scope = new Scope(parent_scope);
     }
 
