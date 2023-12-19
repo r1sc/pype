@@ -66,7 +66,9 @@ function parse_list(tokens: TokenStream): ListExpr {
 }
 
 export interface FieldExpr { kind: "field", left: Expr, fieldnames: string[] }
-export interface BinaryExpr { kind: "*" | "/" | "+" | "-" | "==" | "%", left: Expr, right: Expr }
+const binary_ops = ["*", "/", "+", "-", "==", "%", ">", "<", ">=", "<="] as const;
+export interface BinaryExpr { kind: "*" | "/" | "+" | "-" | "==" | "%" | ">" | "<" | ">=" | "<=" | "and" | "or", left: Expr, right: Expr }
+export interface NotExpr { kind: "not", left: Expr }
 export interface ApplyExpr { kind: "apply", left: Expr, args: Expr[] }
 export interface PipeExpr { kind: "pipe", left: Expr, sections: Expr[] }
 export interface NumberExpr { kind: "number", value: number }
@@ -75,7 +77,7 @@ export interface IdentExpr { kind: "ident", value: string }
 
 export type Expr = FieldExpr | BinaryExpr | LetExpr | LambdaExpr
     | NumberExpr | StringExpr | IdentExpr | PipeExpr | ApplyExpr
-    | RecordExpr | IfExpr | ListExpr;
+    | RecordExpr | IfExpr | ListExpr | NotExpr;
 
 export function parse_expr(tokens: TokenStream): Expr {
     const left = parse_apply(tokens);
@@ -106,10 +108,25 @@ function parse_apply(tokens: TokenStream): Expr {
 
 function parse_field_eqeq(tokens: TokenStream): Expr {
     const left = parse_term(tokens);
-    if (tokens.peek()?.kind === "==") {
+    const next = tokens.peek();
+    if (next?.kind === "=") {
         tokens.advance();
-        const right = parse_field_eqeq(tokens);
-        return { kind: "==", left, right };
+        if (tokens.peek()?.kind === "=") {
+            tokens.advance();
+            const right = parse_term(tokens);
+            return { kind: "==", left, right };
+        }
+        throw new Error("Expected ==");
+    }
+    if (next?.kind === "and") {
+        tokens.advance();
+        const right = parse_term(tokens);
+        return { kind: "and", left, right };
+    }
+    if (next?.kind === "or") {
+        tokens.advance();
+        const right = parse_term(tokens);
+        return { kind: "or", left, right };
     }
     return left;
 }
@@ -133,10 +150,32 @@ function parse_prod(tokens: TokenStream): Expr {
         const right = parse_prod(tokens);
         return { kind: next.kind, left, right };
     }
+    if (next?.kind === ">") {
+        tokens.advance();
+        if (tokens.peek()?.kind === "=") {
+            tokens.advance();
+            const right = parse_prod(tokens);
+            return { kind: ">=", left, right };
+        }
+        return { kind: ">", left, right: parse_prod(tokens) };
+    }
+    if (next?.kind === "<") {
+        tokens.advance();
+        if (tokens.peek()?.kind === "=") {
+            tokens.advance();
+            const right = parse_prod(tokens);
+            return { kind: "<=", left, right };
+        }
+        return { kind: "<", left, right: parse_prod(tokens) };
+    }
     return left;
 }
 
 function parse_number(tokens: TokenStream): NumberExpr {
+    if (tokens.peek()?.kind === "-") {
+        tokens.advance();
+        return { kind: "number", value: -tokens.expect("number").value };
+    }
     return { kind: "number", value: tokens.expect("number").value };
 }
 
@@ -167,6 +206,11 @@ function parse_grouped(tokens: TokenStream): Expr {
 
 function parse_fact(tokens: TokenStream): Expr {
     const next = tokens.peek();
+    if (next?.kind === "not") {
+        tokens.advance();
+        const left = parse_fact(tokens);
+        return { kind: "not", left };
+    }
     if (next?.kind === "number") return parse_number(tokens);
     if (next?.kind === "string") return parse_string(tokens);
     if (next?.kind === "\\") return parse_lambda(tokens);

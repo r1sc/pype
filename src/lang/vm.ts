@@ -110,12 +110,23 @@ export class Scope {
                 if (cond_result.value !== 0) return this.eval_expr(e.then);
                 return this.eval_expr(e._else);
             }
+            case "not": {
+                const result = this.eval_expr(e.left);
+                if(result.kind !== "number") throw new Error("Only numbers can be used as not conditions");
+                return { kind: "number", value: result.value === 0 ? 1 : 0 };
+            }
             case "*":
             case "/":
             case "+":
             case "-":
             case "==":
-            case "%": return this.eval_binary(e);
+            case "%":
+            case "<":
+            case "<=":
+            case ">":
+            case ">=":
+            case "and":
+            case "or": return this.eval_binary(e);
         }
     }
 
@@ -171,6 +182,12 @@ export class Scope {
             case "+": return { kind: "number", value: left.value + right.value };
             case "-": return { kind: "number", value: left.value - right.value };
             case "%": return { kind: "number", value: left.value % right.value };
+            case "<": return { kind: "number", value: left.value < right.value ? 1 : 0 };
+            case "<=": return { kind: "number", value: left.value <= right.value ? 1 : 0 };
+            case ">": return { kind: "number", value: left.value > right.value ? 1 : 0 };
+            case ">=": return { kind: "number", value: left.value >= right.value ? 1 : 0 };
+            case "and": return { kind: "number", value: left.value !== 0 && right.value !== 0 ? 1 : 0 };
+            case "or": return { kind: "number", value: left.value !== 0 || right.value !== 0 ? 1 : 0 };
         }
     }
 }

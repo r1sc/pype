@@ -15,13 +15,12 @@ prod = fact { ('+' | '-') prod }
 fact = number | string | lambda | let | ident | '(' expr ')' | record
 */
 
-const single_tokens = [";", "\\", ":", "|", ".", "*", "/", "+", "-", "(", ")", "{", "}", ",", "[", "]", "%"] as const;
-const ident_tokens = ["let", "if", "then", "else"] as const;
+const single_tokens = [";", "\\", ":", "|", ".", "*", "/", "+", "-", "(", ")", "{", "}", ",", "[", "]", "%", ">", "<", "="] as const;
+const ident_tokens = ["let", "if", "then", "else", "and", "or", "not"] as const;
 export type Token =
     { kind: "number", value: number }
     | { kind: "string", value: string }
     | { kind: "ident", value: string }
-    | { kind: "=" | "==" }
     | { kind: typeof ident_tokens[number] }
     | { kind: typeof single_tokens[number] };
 
@@ -71,13 +70,6 @@ export function lex(src: string): Token[] {
                 tokens.push({ kind: buffer as typeof ident_tokens[number] });
             } else {
                 tokens.push({ kind: "ident", value: buffer });
-            }
-        } else if (src[i] === "=") {
-            if (i < src.length - 1 && src[i + 1] === "=") {
-                i++;
-                tokens.push({ kind: "==" });
-            } else {
-                tokens.push({ kind: "=" });
             }
         } else if (single_tokens.some(x => x === src[i])) {
             tokens.push({ kind: src[i] as typeof single_tokens[number] });
