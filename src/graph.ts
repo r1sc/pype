@@ -1,4 +1,4 @@
-import { add_intrinsics } from "./lang/intrinsics";
+import { add_list_module, add_num_intrinsics, add_string_intrinsics } from "./lang/intrinsics";
 import { TokenStream, lex } from "./lang/lexer";
 import { Expr, parse_expr } from "./lang/parser";
 import { Scope, VMValue, stringify } from "./lang/vm";
@@ -19,7 +19,9 @@ export class Graph {
 
     constructor() {
         this.root = new Scope();
-        add_intrinsics(this.root);
+        add_list_module(this.root);
+        add_string_intrinsics(this.root);
+        add_num_intrinsics(this.root);
     }
 
     compile_and_run_parent(node: CodeNode) {

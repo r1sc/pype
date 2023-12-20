@@ -1,7 +1,13 @@
 <script lang="ts">
+    import { transform } from "esbuild";
     import ContextMenu from "./ContextMenu.svelte";
     import Node from "./Node.svelte";
     import { CodeNode, Graph } from "./graph";
+
+    let min_x = Number.MAX_SAFE_INTEGER;
+    let min_y = Number.MAX_SAFE_INTEGER;
+    let max_x = Number.MIN_SAFE_INTEGER;
+    let max_y = Number.MIN_SAFE_INTEGER;
 
     let graph = new Graph();
     if (!graph.load_from_localstorage()) {
@@ -16,6 +22,13 @@
         graph.edges.push({ from: graph.nodes[3], to: graph.nodes[2] });
     }
 
+    for (const node of graph.nodes) {
+        if (node.x < min_x) min_x = node.x;
+        if (node.y < min_y) min_y = node.y;
+        if (node.x + node.width > max_x) max_x = node.x + node.width;
+        if (node.y + node.height > max_y) max_y = node.y + node.height;
+    }
+
     let current_node: {
         node: CodeNode;
         offsetX: number;
@@ -28,17 +41,7 @@
         offsetY: number;
     } | null = null;
 
-    function path_between(a: CodeNode, b: CodeNode) {
-        const bx = b.x + b.width / 2;
-        const by = b.y;
-
-        const ax = a.x + a.width / 2;
-        const ay = a.y + a.height;
-
-        return path_between_xy(ax, ay, bx, by);
-    }
-
-    function path_between_xy(ax: number, ay: number, bx: number, by: number) {
+    function path_between(ax: number, ay: number, bx: number, by: number) {
         const p1x = ax;
         const p1y = (by - ay) / 2 + ay;
 
@@ -64,12 +67,20 @@
 
     let canvas_translate_x = 0;
     let canvas_translate_y = 0;
+
     function onMouseMove(e: MouseEvent) {
         if (current_node) {
             current_node.node.x =
                 e.pageX - canvas_translate_x - current_node.offsetX;
             current_node.node.y =
                 e.pageY - canvas_translate_y - current_node.offsetY;
+
+            if (current_node.node.x < min_x) min_x = current_node.node.x;
+            if (current_node.node.y < min_y) min_y = current_node.node.y;
+            if (current_node.node.x + current_node.node.width > max_x)
+                max_x = current_node.node.x + current_node.node.width;
+            if (current_node.node.y + current_node.node.height > max_y)
+                max_y = current_node.node.y + current_node.node.height;
             graph = graph;
         } else if (current_edge) {
             current_edge.offsetX = e.pageX - canvas_translate_x;
@@ -180,7 +191,17 @@
             graph.root,
         );
         graph.nodes.push(node);
+
+        if (node.x < min_x) min_x = node.x;
+        if (node.y < min_y) min_y = node.y;
+        if (node.x + node.width > max_x) max_x = node.x + node.width;
+        if (node.y + node.height > max_y) max_y = node.y + node.height;
+
         graph = graph;
+        showContextMenu = false;
+    }
+
+    function onClick() {
         showContextMenu = false;
     }
 </script>
@@ -195,62 +216,76 @@
     on:mouseup={onMouseUp}
     on:wheel={onWheel}
     on:contextmenu={onContextMenu}
+    on:mousemove={onMouseMove}
+    on:click={onClick}
 >
     <div
         class="container"
         style:transform={`translate(${canvas_translate_x}px, ${canvas_translate_y}px) scale(${zoom})`}
     >
-        <svg>
+        <svg
+            style:left={min_x}
+            style:top={min_y}
+            style:width={max_x - min_x}
+            style:height={max_y - min_y}
+        >
             {#each graph.edges as edge}
-                <path d={path_between(edge.from, edge.to)} />
+                <path
+                    d={path_between(
+                        edge.from.x + edge.from.width / 2 - min_x,
+                        edge.from.y + edge.from.height - min_y,
+                        edge.to.x + edge.to.width / 2 - min_x,
+                        edge.to.y - min_y,
+                    )}
+                />
             {/each}
             {#if current_edge}
                 <path
-                    d={path_between_xy(
-                        current_edge.from.x + current_edge.from.width / 2,
-                        current_edge.from.y + current_edge.from.height,
-                        current_edge.offsetX,
-                        current_edge.offsetY,
+                    d={path_between(
+                        current_edge.from.x + current_edge.from.width / 2 - min_x,
+                        current_edge.from.y + current_edge.from.height - min_y,
+                        current_edge.offsetX - min_x,
+                        current_edge.offsetY - min_y,
                     )}
                 />
             {/if}
         </svg>
-        <div class="node-canvas" on:mousemove={onMouseMove}>
-            {#each graph.nodes as node}
-                <Node
-                    x={node.x}
-                    y={node.y}
-                    width={node.width}
-                    height={node.height}
-                    bind:src={node.src}
-                    bind:label={node.title}
-                    output={node.output}
-                    on:resize={(e) =>
-                        updateBoxSize(node, e.detail.width, e.detail.height)}
-                    on:on_title_drag={(e) =>
-                        onNodeDown(node, e.detail.offsetX, e.detail.offsetY)}
-                    on:compile_requested={() => compile_and_run_box(node)}
-                    on:output_ball_clicked={() => add_child_to(node)}
-                    on:on_ball_drag={(e) =>
-                        onBallDown(
-                            node,
-                            e.detail.pageX - canvas_translate_x,
-                            e.detail.pageY - canvas_translate_y,
-                        )}
-                    on:delete_clicked={() => deleteNode(node)}
-                />
-            {/each}
-        </div>
+
+        {#each graph.nodes as node}
+            <Node
+                x={node.x}
+                y={node.y}
+                width={node.width}
+                height={node.height}
+                bind:src={node.src}
+                bind:label={node.title}
+                output={node.output}
+                on:resize={(e) =>
+                    updateBoxSize(node, e.detail.width, e.detail.height)}
+                on:on_title_drag={(e) =>
+                    onNodeDown(node, e.detail.offsetX, e.detail.offsetY)}
+                on:compile_requested={() => compile_and_run_box(node)}
+                on:output_ball_clicked={() => add_child_to(node)}
+                on:on_ball_drag={(e) =>
+                    onBallDown(
+                        node,
+                        e.detail.pageX - canvas_translate_x,
+                        e.detail.pageY - canvas_translate_y,
+                    )}
+                on:delete_clicked={() => deleteNode(node)}
+            />
+        {/each}
+
         {#if showContextMenu}
             <ContextMenu
                 --left="{contextMenuPos.x}px"
                 --top="{contextMenuPos.y}px"
-                on:createNode={e => create_node(e.detail)}
+                on:createNode={(e) => create_node(e.detail)}
             ></ContextMenu>
         {/if}
     </div>
 </div>
-<svg>
+<svg class="svg-bg">
     <pattern
         id="pattern-heroundefined"
         x={canvas_translate_x}
@@ -287,6 +322,9 @@
 
     svg {
         position: absolute;
+    }
+
+    .svg-bg {
         width: 100%;
         height: 100%;
     }

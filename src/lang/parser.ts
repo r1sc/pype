@@ -93,7 +93,7 @@ export function parse_expr(tokens: TokenStream): Expr {
 }
 
 function parse_apply(tokens: TokenStream): Expr {
-    const valid_args = ["number", "string", "{", "\\", "let", "ident", "(", "if"] as const;
+    const valid_args = ["number", "string", "{", "\\", "let", "ident", "(", "if", "["] as const;
     const left = parse_field_eqeq(tokens);
     const next = tokens.peek();
     if (valid_args.some(x => x === next?.kind)) {

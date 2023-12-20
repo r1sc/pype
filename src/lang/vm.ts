@@ -2,11 +2,13 @@ import { BinaryExpr, Expr, NumberExpr, StringExpr } from "./parser";
 
 export type LambdaValue = {
     kind: "lambda",
+    subkind: "expr",
     scope_defined_in: Scope,
     argname: string,
     expr: Expr
 } | {
-    kind: "instrinsic",
+    kind: "lambda",
+    subkind: "intrinsic",
     argname: string,
     fn: (value: VMValue, scope: Scope) => VMValue
 }
@@ -27,10 +29,9 @@ export type VMValue = NumberExpr | StringExpr | RecordValue | LambdaValue | List
 export function stringify(v: VMValue): string {
     switch (v.kind) {
         case "number": return v.value.toString();
-        case "string": return v.value;
+        case "string": return `"${v.value}"`;
         case "record": return `{ ${Array.from(v.fields.entries()).map(([k, v]) => `${k}: ${stringify(v)}`).join(", ")} }`;
         case "lambda": return `lambda<${v.argname}>`;
-        case "instrinsic": return `intrinsic<${v.argname}>`;
         case "list": return `[${v.elements.map(l => stringify(l)).join(", ")}]`;
     }
 }
@@ -50,7 +51,7 @@ export class Scope {
 
     eval_expr(e: Expr): VMValue {
         switch (e.kind) {
-            case "lambda": return { kind: "lambda", argname: e.argname, scope_defined_in: this, expr: e.expr };
+            case "lambda": return { kind: "lambda", subkind: "expr", argname: e.argname, scope_defined_in: this, expr: e.expr };
             case "record": {
                 const fields = new Map<string, VMValue>();
                 for (const [key, value] of Object.entries(e.fields)) {
@@ -88,7 +89,7 @@ export class Scope {
             case "apply": {
                 let lambda = this.eval_expr(e.left);
                 for (const arg of e.args) {
-                    if (lambda.kind !== "lambda" && lambda.kind !== "instrinsic") {
+                    if (lambda.kind !== "lambda") {
                         throw new Error(`Error during apply. Expected lambda, found ${lambda.kind}`);
                     }
                     lambda = this.apply_lambda(lambda, this.eval_expr(arg));
@@ -99,7 +100,7 @@ export class Scope {
                 let cur = this.eval_expr(e.left);
                 for (const section of e.sections) {
                     const lambda = this.eval_expr(section);
-                    if (lambda.kind !== "lambda" && lambda.kind !== "instrinsic") throw new Error("Can only pipe into lambdas");
+                    if (lambda.kind !== "lambda") throw new Error("Can only pipe into lambdas");
                     cur = this.apply_lambda(lambda, cur);
                 }
                 return cur;
@@ -131,7 +132,7 @@ export class Scope {
     }
 
     apply_lambda(lambda: LambdaValue, arg: VMValue): VMValue {
-        if (lambda.kind === "lambda") {
+        if (lambda.subkind === "expr") {
             let curscope = new Scope(lambda.scope_defined_in);
             curscope.constants.set(lambda.argname, arg);
             return curscope.eval_expr(lambda.expr);
@@ -165,8 +166,8 @@ export class Scope {
         const left = this.eval_expr(e.left);
         const right = this.eval_expr(e.right);
 
-        if (e.kind === "+" && (left.kind !== "number" || right.kind !== "number")) {
-            return { kind: "string", value: stringify(left) + stringify(right) };
+        if (e.kind === "+" && left.kind === "string" && right.kind === "string") {
+            return { kind: "string", value: left.value + right.value };
         }
 
         if (e.kind === "==") {
